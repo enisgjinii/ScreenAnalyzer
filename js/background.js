@@ -50,11 +50,8 @@ chrome.action.onClicked.addListener(function(tab) {
 // Text analysis function
 async function analyzeText(text, tabId) {
   try {
-    // Send message to content script to show notification
-    chrome.tabs.sendMessage(tabId, {
-      action: "showNotification",
-      message: "Analyzing selected text...",
-      isError: false
+    chrome.tabs.sendMessage(tabId, { action: "showNotification", message: "Analyzing selected text...", isError: false }, () => {
+      if (chrome.runtime.lastError) console.warn('showNotification failed:', chrome.runtime.lastError.message);
     });
     
     // Here you would typically send the text to your AI service
@@ -65,9 +62,8 @@ async function analyzeText(text, tabId) {
     };
     
     // Send results to content script
-    chrome.tabs.sendMessage(tabId, {
-      action: "showAnalysisResults",
-      results: results
+    chrome.tabs.sendMessage(tabId, { action: "showAnalysisResults", results }, () => {
+      if (chrome.runtime.lastError) console.warn('showAnalysisResults failed:', chrome.runtime.lastError.message);
     });
     
     // Save to history
@@ -94,11 +90,8 @@ async function analyzeText(text, tabId) {
 // Image URL analysis function
 async function analyzeImageUrl(imageUrl, tabId) {
   try {
-    // Send message to content script to show notification
-    chrome.tabs.sendMessage(tabId, {
-      action: "showNotification",
-      message: "Analyzing image...",
-      isError: false
+    chrome.tabs.sendMessage(tabId, { action: "showNotification", message: "Analyzing image...", isError: false }, () => {
+      if (chrome.runtime.lastError) console.warn('showNotification failed:', chrome.runtime.lastError.message);
     });
     
     // Here you would typically process the image URL
@@ -109,9 +102,8 @@ async function analyzeImageUrl(imageUrl, tabId) {
     };
     
     // Send results to content script
-    chrome.tabs.sendMessage(tabId, {
-      action: "showAnalysisResults",
-      results: results
+    chrome.tabs.sendMessage(tabId, { action: "showAnalysisResults", results }, () => {
+      if (chrome.runtime.lastError) console.warn('showAnalysisResults failed:', chrome.runtime.lastError.message);
     });
     
     // Save to history
@@ -138,11 +130,8 @@ async function analyzeImageUrl(imageUrl, tabId) {
 // Data URL image analysis function
 async function analyzeDataUrlImage(dataUrl, tabId) {
   try {
-    // Send message to content script to show notification
-    chrome.tabs.sendMessage(tabId, {
-      action: "showNotification",
-      message: "Analyzing screenshot...",
-      isError: false
+    chrome.tabs.sendMessage(tabId, { action: "showNotification", message: "Analyzing screenshot...", isError: false }, () => {
+      if (chrome.runtime.lastError) console.warn('showNotification failed:', chrome.runtime.lastError.message);
     });
     
     // Here you would typically process the data URL
@@ -153,9 +142,8 @@ async function analyzeDataUrlImage(dataUrl, tabId) {
     };
     
     // Send results to content script
-    chrome.tabs.sendMessage(tabId, {
-      action: "showAnalysisResults",
-      results: results
+    chrome.tabs.sendMessage(tabId, { action: "showAnalysisResults", results }, () => {
+      if (chrome.runtime.lastError) console.warn('showAnalysisResults failed:', chrome.runtime.lastError.message);
     });
     
     // Save to history
@@ -181,11 +169,8 @@ async function analyzeDataUrlImage(dataUrl, tabId) {
 // Page analysis function
 async function analyzePage(tab) {
   try {
-    // Send message to content script to show notification
-    chrome.tabs.sendMessage(tab.id, {
-      action: "showNotification",
-      message: "Analyzing page...",
-      isError: false
+    chrome.tabs.sendMessage(tab.id, { action: "showNotification", message: "Analyzing page...", isError: false }, () => {
+      if (chrome.runtime.lastError) console.warn('showNotification failed:', chrome.runtime.lastError.message);
     });
     
     // Get page content from content script
@@ -207,9 +192,8 @@ async function analyzePage(tab) {
     };
     
     // Send results to content script
-    chrome.tabs.sendMessage(tab.id, {
-      action: "showAnalysisResults",
-      results: results
+    chrome.tabs.sendMessage(tab.id, { action: "showAnalysisResults", results }, () => {
+      if (chrome.runtime.lastError) console.warn('showAnalysisResults failed:', chrome.runtime.lastError.message);
     });
     
     // Save to history
@@ -255,7 +239,7 @@ async function saveToHistory(entry) {
 async function sendChatMessage(message, model, apiKey) {
   try {
     // Using Groq API for chat
-    const response = await fetch('https://api.groq.com/v1/chat/completions', {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -286,7 +270,13 @@ async function sendChatMessage(message, model, apiKey) {
     const data = await response.json();
     return data.choices[0].message.content;
   } catch (error) {
-    console.error('Chat API error:', error);
+    console.error('Chat API error:', { url: 'https://api.groq.com/openai/v1/chat/completions', error });
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'images/icon48.png',
+      title: 'API Error',
+      message: error.message || 'Failed to process request'
+    });
     throw error;
   }
 }
@@ -300,14 +290,11 @@ async function sendChatWithHistory(history, model, apiKey) {
         role: 'system',
         content: 'You are a helpful AI assistant. Be concise yet thorough in your responses.'
       },
-      ...history.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }))
+      ...history.map(msg => ({ role: msg.role, content: msg.content }))
     ];
     
     // Using Groq API for chat
-    const response = await fetch('https://api.groq.com/v1/chat/completions', {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -329,7 +316,13 @@ async function sendChatWithHistory(history, model, apiKey) {
     const data = await response.json();
     return data.choices[0].message.content;
   } catch (error) {
-    console.error('Chat API error:', error);
+    console.error('Chat API error:', { url: 'https://api.groq.com/openai/v1/chat/completions', error });
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'images/icon48.png',
+      title: 'API Error',
+      message: error.message || 'Failed to process request'
+    });
     throw error;
   }
 }
@@ -383,6 +376,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (error) {
       sendResponse({ success: false, error: error.message });
       return true;
+    }
+  } else if (message.action === 'openSidePanel') {
+    if (chrome.sidePanel && sender.tab) {
+      chrome.sidePanel.open({ tabId: sender.tab.id });
+      sendResponse({ success: true });
+    } else {
+      sendResponse({ success: false, error: 'sidePanel API not available' });
     }
   }
 });

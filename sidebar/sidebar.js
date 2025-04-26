@@ -96,22 +96,21 @@ document.addEventListener('DOMContentLoaded', function() {
     // Show thinking indicator
     const thinkingId = addThinkingIndicator();
     
+    let response;
     try {
-      let response;
-      
-      // Check if including page context is enabled
       if (includePageContext.checked) {
-        // Get page content from the active tab
-        const pageContentResponse = await chrome.runtime.sendMessage({ action: 'getPageContent' });
-        
-        if (!pageContentResponse.success) {
-          throw new Error(pageContentResponse.error || 'Failed to get page content');
+        // Attempt to get page content
+        let pageContentResponse;
+        try {
+          pageContentResponse = await chrome.runtime.sendMessage({ action: 'getPageContent' });
+        } catch (e) {
+          pageContentResponse = { success: false, error: e.message };
         }
         
-        const pageContent = pageContentResponse.content;
-        
-        // Format message with page context
-        const enhancedMessage = `
+        if (pageContentResponse.success) {
+          const pageContent = pageContentResponse.content;
+          // Format message with page context
+          const enhancedMessage = `
 The user is asking about this web page:
 URL: ${pageContent.url}
 Title: ${pageContent.title}
@@ -125,13 +124,26 @@ User's question: ${message}
 Please respond to the user's question based on this context. If the question is not related to the page, you can answer it generally.
 `;
 
-        // Send enhanced message
-        response = await chrome.runtime.sendMessage({
-          action: 'chatMessage',
-          messageText: enhancedMessage,
-          model: selectedModel || 'llama3-8b-8192',
-          apiKey: groqApiKey
-        });
+          // Send enhanced message
+          response = await chrome.runtime.sendMessage({
+            action: 'chatMessage',
+            messageText: enhancedMessage,
+            model: selectedModel || 'llama3-8b-8192',
+            apiKey: groqApiKey
+          });
+        } else {
+          // Fallback when page context unavailable
+          addMessageToChat('system', `Page context unavailable: ${pageContentResponse.error}. Sending without page context.`);
+          includePageContext.checked = false;
+          // Use regular history-based chat
+          chatHistory.push({ role: 'user', content: message });
+          response = await chrome.runtime.sendMessage({
+            action: 'chatMessage',
+            history: chatHistory,
+            model: selectedModel || 'llama3-8b-8192',
+            apiKey: groqApiKey
+          });
+        }
       } else {
         // Add message to history
         chatHistory.push({ role: 'user', content: message });
