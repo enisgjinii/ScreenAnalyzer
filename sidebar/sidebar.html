@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ScreenAnalyzer Chat</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/sidebar.css">
+</head>
+<body>
+  <div id="chatContainer" class="theme-light">
+    <div id="chatHeader">
+      <div class="header-left">
+        <h2>AI Chat</h2>
+        <div class="badge">ScreenAnalyzer</div>
+      </div>
+      <div class="header-controls">
+        <button id="themeToggle" class="icon-button" title="Toggle dark mode">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+          </svg>
+        </button>
+        <button id="exportChat" class="icon-button" title="Export conversation">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+        </button>
+        <button id="clearChatBtn" class="icon-button" title="Clear chat">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-nav">
+      <button class="tab-button active" data-tab="chat">Chat</button>
+      <button class="tab-button" data-tab="history">History</button>
+      <button class="tab-button" data-tab="settings">Settings</button>
+    </div>
+    
+    <div class="tab-content active" id="tab-chat">
+      <div id="chatMessages">
+        <!-- Chat messages will appear here -->
+        <div class="message system">Welcome! Ask me anything about the current page or start a new conversation.</div>
+      </div>
+      
+      <div id="chatInputArea">
+        <div class="input-options">
+          <label class="toggle">
+            <input type="checkbox" id="includePageContext">
+            <span class="toggle-label">Include page context</span>
+          </label>
+        </div>
+        <textarea id="chatInput" placeholder="Type your message..."></textarea>
+        <button id="sendChatBtn" title="Send Message">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </div>
+    
+    <div class="tab-content" id="tab-history">
+      <div class="history-container">
+        <div class="history-header">
+          <h3>Analysis History</h3>
+          <div class="history-controls">
+            <button id="clearHistory" class="small-button">Clear All</button>
+          </div>
+        </div>
+        <div id="historyList">
+          <!-- History items will be populated here -->
+          <div class="empty-state">No recent analyses</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="tab-content" id="tab-settings">
+      <div class="settings-container">
+        <div class="form-group">
+          <label for="apiKeyInput">GroqCloud API Key</label>
+          <div class="input-with-button">
+            <input type="password" id="apiKeyInput" placeholder="Enter your API key">
+            <button id="saveApiKeyBtn">Save</button>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="modelSelectSidebar">Default Model</label>
+          <select id="modelSelectSidebar">
+            <option value="llama-3.3-70b-versatile">Llama-3.3 70B Versatile</option>
+            <option value="llama3-70b-8192">Llama-3 70B (8k context)</option>
+            <option value="llama-3.1-8b-instant">Llama-3.1 8B Instant</option>
+            <option value="llama3-8b-8192">Llama-3 8B (8k context)</option>
+            <option value="mixtral-8x7b-32768">Mixtral 8x7B (32k context)</option>
+            <option value="gemma2-9b-it">Gemma 2 9B IT</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label class="setting-toggle">
+            <input type="checkbox" id="autoSaveHistory" checked>
+            <span>Automatically save analysis history</span>
+          </label>
+        </div>
+        
+        <div class="form-group">
+          <label class="setting-toggle">
+            <input type="checkbox" id="darkModeToggle">
+            <span>Dark mode</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="sidebar.js"></script>
+</body>
+</html>
