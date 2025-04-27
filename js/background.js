@@ -17,27 +17,74 @@ chrome.runtime.onInstalled.addListener(function() {
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async function(info, tab) {
   if (info.menuItemId === "screenanalyzer-menu") {
-    // Handle the context menu click based on the context
-    if (info.selectionText) {
-      // Text selection was made
-      await analyzeText(info.selectionText, tab.id);
-    } else if (info.srcUrl && info.srcUrl.startsWith('data:image')) {
-      // Image data URL was selected
-      await analyzeDataUrlImage(info.srcUrl, tab.id);
-    } else if (info.srcUrl) {
-      // Image URL was selected
-      await analyzeImageUrl(info.srcUrl, tab.id);
-    } else {
-      // Full page was selected
-      await analyzePage(tab);
-    }
-    
-    // Open the side panel
-    if (chrome.sidePanel) {
-      chrome.sidePanel.open({ tabId: tab.id });
+    // First, ensure the content script is loaded
+    try {
+      await ensureContentScriptLoaded(tab.id);
+      
+      // Handle the context menu click based on the context
+      if (info.selectionText) {
+        // Text selection was made
+        await analyzeText(info.selectionText, tab.id);
+      } else if (info.srcUrl && info.srcUrl.startsWith('data:image')) {
+        // Image data URL was selected
+        await analyzeDataUrlImage(info.srcUrl, tab.id);
+      } else if (info.srcUrl) {
+        // Image URL was selected
+        await analyzeImageUrl(info.srcUrl, tab.id);
+      } else {
+        // Full page was selected
+        await analyzePage(tab);
+      }
+      
+      // Open the side panel
+      if (chrome.sidePanel) {
+        chrome.sidePanel.open({ tabId: tab.id });
+      }
+    } catch (error) {
+      console.error("Error handling context menu click:", error);
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'images/icon48.png',
+        title: 'Error',
+        message: error.message || 'Failed to analyze content'
+      });
     }
   }
 });
+
+// Function to ensure content script is loaded before sending messages
+async function ensureContentScriptLoaded(tabId) {
+  return new Promise((resolve, reject) => {
+    // First check if we can communicate with the content script
+    chrome.tabs.sendMessage(tabId, { action: "ping" }, response => {
+      if (chrome.runtime.lastError) {
+        // Content script is not loaded, inject it
+        chrome.scripting.executeScript({
+          target: { tabId: tabId },
+          files: ['js/content.js']
+        })
+        .then(() => {
+          // Now verify the content script is working
+          setTimeout(() => {
+            chrome.tabs.sendMessage(tabId, { action: "ping" }, verifyResponse => {
+              if (chrome.runtime.lastError) {
+                reject(new Error("Content script couldn't be loaded properly"));
+              } else {
+                resolve();
+              }
+            });
+          }, 200); // Short delay to ensure script is fully initialized
+        })
+        .catch(err => {
+          reject(new Error("Failed to inject content script: " + err.message));
+        });
+      } else {
+        // Content script is already loaded
+        resolve();
+      }
+    });
+  });
+}
 
 // Handle action button click
 chrome.action.onClicked.addListener(function(tab) {
@@ -50,9 +97,7 @@ chrome.action.onClicked.addListener(function(tab) {
 // Text analysis function
 async function analyzeText(text, tabId) {
   try {
-    chrome.tabs.sendMessage(tabId, { action: "showNotification", message: "Analyzing selected text...", isError: false }, () => {
-      if (chrome.runtime.lastError) console.warn('showNotification failed:', chrome.runtime.lastError.message);
-    });
+    await sendMessageToTab(tabId, { action: "showNotification", message: "Analyzing selected text...", isError: false });
     
     // Here you would typically send the text to your AI service
     // For now, we'll just create a placeholder analysis result
@@ -62,9 +107,7 @@ async function analyzeText(text, tabId) {
     };
     
     // Send results to content script
-    chrome.tabs.sendMessage(tabId, { action: "showAnalysisResults", results }, () => {
-      if (chrome.runtime.lastError) console.warn('showAnalysisResults failed:', chrome.runtime.lastError.message);
-    });
+    await sendMessageToTab(tabId, { action: "showAnalysisResults", results });
     
     // Save to history
     saveToHistory({
@@ -78,11 +121,15 @@ async function analyzeText(text, tabId) {
     return results;
   } catch (error) {
     console.error("Error analyzing text:", error);
-    chrome.tabs.sendMessage(tabId, {
-      action: "showNotification",
-      message: "Error analyzing text: " + error.message,
-      isError: true
-    });
+    try {
+      await sendMessageToTab(tabId, {
+        action: "showNotification",
+        message: "Error analyzing text: " + error.message,
+        isError: true
+      });
+    } catch (e) {
+      console.error("Failed to show error notification:", e);
+    }
     return { error: error.message };
   }
 }
@@ -90,9 +137,7 @@ async function analyzeText(text, tabId) {
 // Image URL analysis function
 async function analyzeImageUrl(imageUrl, tabId) {
   try {
-    chrome.tabs.sendMessage(tabId, { action: "showNotification", message: "Analyzing image...", isError: false }, () => {
-      if (chrome.runtime.lastError) console.warn('showNotification failed:', chrome.runtime.lastError.message);
-    });
+    await sendMessageToTab(tabId, { action: "showNotification", message: "Analyzing image...", isError: false });
     
     // Here you would typically process the image URL
     // For now, we'll just create a placeholder
@@ -102,9 +147,7 @@ async function analyzeImageUrl(imageUrl, tabId) {
     };
     
     // Send results to content script
-    chrome.tabs.sendMessage(tabId, { action: "showAnalysisResults", results }, () => {
-      if (chrome.runtime.lastError) console.warn('showAnalysisResults failed:', chrome.runtime.lastError.message);
-    });
+    await sendMessageToTab(tabId, { action: "showAnalysisResults", results });
     
     // Save to history
     saveToHistory({
@@ -118,11 +161,15 @@ async function analyzeImageUrl(imageUrl, tabId) {
     return results;
   } catch (error) {
     console.error("Error analyzing image URL:", error);
-    chrome.tabs.sendMessage(tabId, {
-      action: "showNotification",
-      message: "Error analyzing image: " + error.message,
-      isError: true
-    });
+    try {
+      await sendMessageToTab(tabId, {
+        action: "showNotification",
+        message: "Error analyzing image: " + error.message,
+        isError: true
+      });
+    } catch (e) {
+      console.error("Failed to show error notification:", e);
+    }
     return { error: error.message };
   }
 }
@@ -130,9 +177,7 @@ async function analyzeImageUrl(imageUrl, tabId) {
 // Data URL image analysis function
 async function analyzeDataUrlImage(dataUrl, tabId) {
   try {
-    chrome.tabs.sendMessage(tabId, { action: "showNotification", message: "Analyzing screenshot...", isError: false }, () => {
-      if (chrome.runtime.lastError) console.warn('showNotification failed:', chrome.runtime.lastError.message);
-    });
+    await sendMessageToTab(tabId, { action: "showNotification", message: "Analyzing screenshot...", isError: false });
     
     // Here you would typically process the data URL
     // For now, we'll just create a placeholder
@@ -142,9 +187,7 @@ async function analyzeDataUrlImage(dataUrl, tabId) {
     };
     
     // Send results to content script
-    chrome.tabs.sendMessage(tabId, { action: "showAnalysisResults", results }, () => {
-      if (chrome.runtime.lastError) console.warn('showAnalysisResults failed:', chrome.runtime.lastError.message);
-    });
+    await sendMessageToTab(tabId, { action: "showAnalysisResults", results });
     
     // Save to history
     saveToHistory({
@@ -157,11 +200,15 @@ async function analyzeDataUrlImage(dataUrl, tabId) {
     return results;
   } catch (error) {
     console.error("Error analyzing data URL image:", error);
-    chrome.tabs.sendMessage(tabId, {
-      action: "showNotification",
-      message: "Error analyzing screenshot: " + error.message,
-      isError: true
-    });
+    try {
+      await sendMessageToTab(tabId, {
+        action: "showNotification",
+        message: "Error analyzing screenshot: " + error.message,
+        isError: true
+      });
+    } catch (e) {
+      console.error("Failed to show error notification:", e);
+    }
     return { error: error.message };
   }
 }
@@ -169,20 +216,10 @@ async function analyzeDataUrlImage(dataUrl, tabId) {
 // Page analysis function
 async function analyzePage(tab) {
   try {
-    chrome.tabs.sendMessage(tab.id, { action: "showNotification", message: "Analyzing page...", isError: false }, () => {
-      if (chrome.runtime.lastError) console.warn('showNotification failed:', chrome.runtime.lastError.message);
-    });
+    await sendMessageToTab(tab.id, { action: "showNotification", message: "Analyzing page...", isError: false });
     
     // Get page content from content script
-    const pageContent = await new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(tab.id, { action: "getPageContent" }, response => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError);
-        } else {
-          resolve(response);
-        }
-      });
-    });
+    const pageContent = await getPageContentFromTab(tab.id);
     
     // Here you would typically analyze the page content
     // For now, we'll just create a placeholder
@@ -192,9 +229,7 @@ async function analyzePage(tab) {
     };
     
     // Send results to content script
-    chrome.tabs.sendMessage(tab.id, { action: "showAnalysisResults", results }, () => {
-      if (chrome.runtime.lastError) console.warn('showAnalysisResults failed:', chrome.runtime.lastError.message);
-    });
+    await sendMessageToTab(tab.id, { action: "showAnalysisResults", results });
     
     // Save to history
     saveToHistory({
@@ -209,12 +244,137 @@ async function analyzePage(tab) {
     return results;
   } catch (error) {
     console.error("Error analyzing page:", error);
-    chrome.tabs.sendMessage(tab.id, {
-      action: "showNotification",
-      message: "Error analyzing page: " + error.message,
-      isError: true
-    });
+    try {
+      await sendMessageToTab(tab.id, {
+        action: "showNotification",
+        message: "Error analyzing page: " + error.message,
+        isError: true
+      });
+    } catch (e) {
+      console.error("Failed to show error notification:", e);
+    }
     return { error: error.message };
+  }
+}
+
+// Helper function to send messages to tabs with proper error handling
+async function sendMessageToTab(tabId, message) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, message, response => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve(response);
+      }
+    });
+  });
+}
+
+// Helper function to get page content from a tab
+async function getPageContentFromTab(tabId) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, { action: "getPageContent" }, response => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve(response);
+      }
+    });
+  });
+}
+
+// New function: Capture screenshot of the current tab
+async function captureScreenshot() {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.query({active: true, currentWindow: true}, async (tabs) => {
+      if (!tabs || tabs.length === 0) {
+        reject(new Error('No active tab found'));
+        return;
+      }
+      
+      const activeTab = tabs[0];
+      try {
+        // Ensure we have the activeTab permission
+        await chrome.tabs.update(activeTab.id, {active: true});
+        
+        // Capture the visible tab content
+        const dataUrl = await chrome.tabs.captureVisibleTab(null, {format: 'png'});
+        resolve({
+          success: true,
+          dataUrl: dataUrl
+        });
+      } catch (error) {
+        console.error('Screenshot capture error:', error);
+        reject(new Error('Failed to capture screenshot: ' + error.message));
+      }
+    });
+  });
+}
+
+// New function: Generic content analysis that calls the Groq API
+async function analyzeGenericContent(payload, model, apiKey) {
+  try {
+    let analysisPrompt = "";
+    
+    if (payload.type === 'pageContent') {
+      const pageData = payload.data;
+      analysisPrompt = `Analyze this webpage:
+Title: ${pageData.title || 'Untitled'}
+URL: ${pageData.url || 'No URL provided'}
+Description: ${pageData.description || 'No meta description'}
+
+Content:
+${pageData.content?.substring(0, 15000) || 'No content available'}
+
+Provide a concise summary of what this page is about and key information it contains. 
+Then, provide recommended next steps or actions based on this content.`;
+    } else if (payload.type === 'plainText') {
+      analysisPrompt = `Analyze the following text extracted from a screenshot or image:
+${payload.data?.substring(0, 15000) || 'No text provided'}
+
+Provide a concise summary of what this text contains and its key points.
+Then, suggest next steps or actions based on this content.`;
+    } else {
+      throw new Error('Unsupported content type for analysis');
+    }
+    
+    // Call the Groq API
+    const apiResponse = await sendChatMessage(analysisPrompt, model, apiKey);
+    
+    // Process the response to extract summary and next steps
+    const parts = apiResponse.split('\n\n');
+    let summary = apiResponse;
+    let nextSteps = "";
+    
+    // Try to identify if there are next steps in the response
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i].toLowerCase();
+      if (part.includes('next step') || part.includes('recommendation') || part.includes('action') ||
+          part.includes('suggested') || part.startsWith('next:')) {
+        summary = parts.slice(0, i).join('\n\n');
+        nextSteps = parts.slice(i).join('\n\n');
+        break;
+      }
+    }
+    
+    // If no clear next steps section, use default split (70/30)
+    if (!nextSteps) {
+      const splitPoint = Math.floor(apiResponse.length * 0.7);
+      summary = apiResponse.substring(0, splitPoint);
+      nextSteps = apiResponse.substring(splitPoint);
+    }
+    
+    return {
+      success: true,
+      summary: summary.trim(),
+      nextSteps: nextSteps.trim()
+    };
+  } catch (error) {
+    console.error('Error analyzing content:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to analyze content'
+    };
   }
 }
 
@@ -330,7 +490,37 @@ async function sendChatWithHistory(history, model, apiKey) {
 // Handle messages from other parts of the extension
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Handle different message actions
-  if (message.action === 'chatMessage') {
+  if (message.action === 'ping') {
+    // Simple ping to check if content script is loaded
+    sendResponse({ success: true });
+    return true;
+  } else if (message.action === 'captureScreenshot') {
+    // Handle screenshot capture request from popup
+    captureScreenshot()
+      .then(result => {
+        sendResponse(result);
+      })
+      .catch(error => {
+        sendResponse({ 
+          success: false, 
+          error: error.message || 'Failed to capture screenshot'
+        });
+      });
+    return true; // Keep the message channel open for async response
+  } else if (message.action === 'analyzeGenericContent') {
+    // Handle generic content analysis
+    analyzeGenericContent(message.payload, message.model, message.apiKey)
+      .then(result => {
+        sendResponse(result);
+      })
+      .catch(error => {
+        sendResponse({ 
+          success: false, 
+          error: error.message || 'Failed to analyze content'
+        });
+      });
+    return true; // Keep the message channel open for async response
+  } else if (message.action === 'chatMessage') {
     // Handle chat messages with or without history
     if (message.history) {
       // Chat with history
@@ -354,24 +544,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // Keep the message channel open for async response
   } else if (message.action === 'getPageContent') {
     try {
-      // Forward the request to the active tab's content script
-      chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-        if (tabs.length === 0) {
-          sendResponse({ success: false, error: 'No active tab found' });
-          return;
-        }
-        
-        chrome.tabs.sendMessage(tabs[0].id, { action: 'getPageContent' }, function(response) {
-          if (chrome.runtime.lastError) {
+      // Check if a specific tabId was provided
+      const tabId = message.tabId;
+      
+      if (tabId) {
+        // Try to ensure the content script is loaded in the specified tab
+        ensureContentScriptLoaded(tabId)
+          .then(() => {
+            // Content script is confirmed loaded, now get content
+            return getPageContentFromTab(tabId);
+          })
+          .then(content => {
+            sendResponse({ success: true, content: content });
+          })
+          .catch(error => {
             sendResponse({ 
               success: false, 
-              error: chrome.runtime.lastError.message || 'Failed to get page content' 
+              error: error.message || 'Failed to get page content'
             });
-          } else {
-            sendResponse({ success: true, content: response });
+          });
+      } else {
+        // Use the active tab as before
+        chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+          if (tabs.length === 0) {
+            sendResponse({ success: false, error: 'No active tab found' });
+            return;
           }
+          
+          const activeTabId = tabs[0].id;
+          
+          ensureContentScriptLoaded(activeTabId)
+            .then(() => {
+              // Content script is loaded, now get content
+              return getPageContentFromTab(activeTabId);
+            })
+            .then(content => {
+              sendResponse({ success: true, content: content });
+            })
+            .catch(error => {
+              sendResponse({ 
+                success: false, 
+                error: error.message || 'Failed to get page content' 
+              });
+            });
         });
-      });
+      }
+      
       return true; // Keep the message channel open for async response
     } catch (error) {
       sendResponse({ success: false, error: error.message });
@@ -385,4 +603,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: false, error: 'sidePanel API not available' });
     }
   }
+  
+  return true; // Always return true to indicate you might respond asynchronously
 });

@@ -82,17 +82,24 @@ document.addEventListener('DOMContentLoaded', () => {
       showLoadingState('Analyzing page text...');
 
       chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+        if (!tabs || tabs.length === 0) {
+          handleAnalysisError('No active tab found.');
+          return;
+        }
+        
         const activeTab = tabs[0];
-        chrome.scripting.executeScript({
-          target: {tabId: activeTab.id},
-          function: capturePageContent
-        }, (results) => {
-          if (chrome.runtime.lastError || !results || results.length === 0) {
-            handleAnalysisError('Could not analyze this page.');
+        
+        // Use the background script as an intermediary to communicate with content script
+        chrome.runtime.sendMessage({
+          action: 'getPageContent',
+          tabId: activeTab.id
+        }, response => {
+          if (!response || !response.success) {
+            handleAnalysisError(response?.error || 'Could not analyze this page.');
             return;
           }
-          const pageContent = results[0].result;
-          sendContentForAnalysis({ type: 'pageContent', data: pageContent });
+          
+          sendContentForAnalysis({ type: 'pageContent', data: response.content });
         });
       });
     });
@@ -112,7 +119,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
       try {
         // 1. Request screenshot from background script
-        const response = await chrome.runtime.sendMessage({ action: 'captureScreenshot' });
+        const response = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ action: 'captureScreenshot' }, (result) => {
+            if (chrome.runtime.lastError) {
+              resolve({ success: false, error: chrome.runtime.lastError.message });
+            } else {
+              resolve(result || { success: false, error: 'No response' });
+            }
+          });
+        });
+        
         if (!response || !response.success || !response.dataUrl) {
           throw new Error(response.error || 'Failed to capture screenshot.');
         }
@@ -168,13 +184,21 @@ document.addEventListener('DOMContentLoaded', () => {
   // NEW: Send content (text or screenshot OCR) to background for analysis
   function sendContentForAnalysis(contentPayload) {
     chrome.storage.sync.get(['groqApiKey', 'selectedModel'], (settings) => {
-      chrome.runtime.sendMessage({
+      const message = {
         action: 'analyzeGenericContent', // Use a new generic action
         payload: contentPayload,
         model: settings.selectedModel,
         apiKey: settings.groqApiKey
-      }, (response) => {
+      };
+      
+      chrome.runtime.sendMessage(message, response => {
         ocrProgressDiv.style.display = 'none'; // Hide progress after analysis
+        
+        if (chrome.runtime.lastError) {
+          handleAnalysisError(chrome.runtime.lastError.message || 'Communication error');
+          return;
+        }
+        
         if (response && response.success) {
           summaryContent.innerHTML = ''; // Clear thinking message
           summaryContent.textContent = response.summary;
@@ -215,31 +239,5 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
     element.appendChild(button);
-  }
-
-  // Function to capture page content (will be injected into the active tab)
-  function capturePageContent() {
-    // Get visible text content from the page
-    const bodyText = document.body.innerText;
-    
-    // Get the page title
-    const pageTitle = document.title;
-    
-    // Get meta description if available
-    let metaDescription = '';
-    const metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc) {
-      metaDescription = metaDesc.getAttribute('content');
-    }
-    
-    // Get URL
-    const pageUrl = window.location.href;
-    
-    return {
-      title: pageTitle,
-      url: pageUrl,
-      description: metaDescription,
-      content: bodyText.substring(0, 15000) // Limiting content size
-    };
   }
 });
